@@ -1,0 +1,158 @@
+#!/usr/bin/python
+
+# Copyright (C) 2017 Michael Coughlin
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+""".
+Gravitational-wave Electromagnetic Coincidence
+
+This script compares gravitational-wave skymaps to list of transients.
+
+Comments should be e-mailed to michael.coughlin@ligo.org.
+
+"""
+
+
+import os, sys, glob, optparse, shutil, warnings
+import numpy as np
+import healpy as hp
+import ephem
+
+import gwemcoinc.utils, gwemcoinc.gracedb
+import gwemcoinc.plotting
+
+if not os.getenv("DISPLAY", None):
+    import matplotlib
+    matplotlib.use("agg", warn=False)
+
+__author__ = "Michael Coughlin <michael.coughlin@ligo.org>"
+__version__ = 1.0
+__date__    = "6/17/2017"
+
+# =============================================================================
+#
+#                               DEFINITIONS
+#
+# =============================================================================
+
+def parse_commandline():
+    """@Parse the options given on the command-line.
+    """
+    parser = optparse.OptionParser(usage=__doc__,version=__version__)
+
+    parser.add_option("-s", "--skymap", help="GW skymap.", default='../output/skymaps/G268556.fits')
+    parser.add_option("-g", "--gpstime", help="GPS time.", default=1167559936.0, type=float)
+    parser.add_option("--do3D",  action="store_true", default=False)
+    parser.add_option("-o", "--outputDir", help="output directory",default="../output")
+    parser.add_option("-n", "--event", help="event name",default="G268556")
+    parser.add_option("--doEvent",  action="store_true", default=False)
+    parser.add_option("--doSkymap",  action="store_true", default=False)
+    parser.add_option("--doPlots",  action="store_true", default=False)
+    parser.add_option("--doTransients",  action="store_true", default=False)
+    parser.add_option("--transientsFile",default="../transients/ps1_objects.csv")
+
+    parser.add_option("--nside",default=256,type=int)
+    parser.add_option("--DScale",default=1.0,type=float)
+    parser.add_option("--dt",default=14.0,type=float)
+
+    parser.add_option("-v", "--verbose", action="store_true", default=False,
+                      help="Run verbosely. (Default: False)")
+
+    opts, args = parser.parse_args()
+
+    # show parameters
+    if opts.verbose:
+        print >> sys.stderr, ""
+        print >> sys.stderr, "running gwemcoinc_run..."
+        print >> sys.stderr, "version: %s"%__version__
+        print >> sys.stderr, ""
+        print >> sys.stderr, "***************** PARAMETERS ********************"
+        for o in opts.__dict__.items():
+          print >> sys.stderr, o[0]+":"
+          print >> sys.stderr, o[1]
+        print >> sys.stderr, ""
+
+    return opts
+
+def params_struct(opts):
+    """@Creates gwemcoinc params structure
+    @param opts
+        gwemcoinc command line options
+    """
+
+    params = {}
+
+    params["skymap"] = opts.skymap
+    params["outputDir"] = opts.outputDir
+    params["event"] = opts.event
+    params["doPlots"] = opts.doPlots
+    params["do3D"] = opts.do3D
+    params["doTransients"] = opts.doTransients
+    params["transientsFile"] = opts.transientsFile
+    params["nside"] = opts.nside
+    params["DScale"] = opts.DScale
+    params["dt"] = opts.dt
+
+    return params
+
+# =============================================================================
+#
+#                                    MAIN
+#
+# =============================================================================
+
+warnings.filterwarnings("ignore")
+
+# Parse command line
+opts = parse_commandline()
+if not os.path.isdir(opts.outputDir): os.mkdir(opts.outputDir)
+
+params = params_struct(opts)
+
+if opts.doEvent:
+    params["skymap"], eventinfo = gwemcoinc.gracedb.get_event(params)
+    params["gpstime"] = eventinfo["gpstime"]
+elif opts.doSkymap:
+    params["skymap"]
+    params["gpstime"]
+else:
+    print "Need to enable --doEvent or --doSkymap"
+    exit(0)
+
+print "Loading skymap..."
+# Function to read maps
+if opts.do3D:
+    map_struct = gwemcoinc.utils.read_skymap(params, is3D=True)
+else:
+    map_struct = gwemcoinc.utils.read_skymap(params, is3D=False)
+
+if opts.doPlots:
+    print "Plotting skymap..."
+    gwemcoinc.plotting.skymap(params,map_struct)
+
+if opts.doTransients:
+    print "Loading transients list..."
+    transients_struct = gwemcoinc.utils.read_transients(params, map_struct)
+
+    transientsfile = os.path.join(params["outputDir"],'transients.dat')
+    fid = open(transientsfile,'w')
+    for data,name,classification in zip(transients_struct["data"],transients_struct["name"],transients_struct["classification"]):
+        fid.write("%s %.5f %.5f %.5e\n"%(name,data[0],data[1],data[7]))
+    fid.close()
+
+    if opts.doPlots:
+        print "Plotting transients struct..."
+        gwemcoinc.plotting.transients(params, map_struct, transients_struct)
