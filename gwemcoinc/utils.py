@@ -7,8 +7,6 @@ import itertools
 
 from scipy.stats import norm
 
-import glue.segments
-
 import ephem
 
 import astropy.coordinates
