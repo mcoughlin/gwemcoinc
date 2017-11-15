@@ -17,12 +17,13 @@ import matplotlib.pyplot as plt
 from ligo.gracedb.rest import GraceDb, HTTPError
 from ligo.gracedb.rest import GraceDbBasic
 
-url = 'https://gracedb-test.ligo.org/api/'
-#url = 'https://gracedb-test.ligo.org/apibasic/'
+#url = 'https://gracedb-test.ligo.org/api/'
+url = 'https://gracedb-test.ligo.org/apibasic/'
 
 def get_event(params):
 
-    g = GraceDb()
+    #g = GraceDb()
+    g = GraceDbBasic()
     eventString = params["event"]
     events = g.events('%s'%eventString)
     event = [x for x in events][0]
